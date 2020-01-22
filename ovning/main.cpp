@@ -15,6 +15,11 @@ constexpr static std::array<char, 4> binaryOperators = {
 	'/'
 };
 
+struct S {
+	S(int i ) { std::cout << "New scope size " << i << '\n'; };
+	~S() { std::cout << "Scope destroyed\n"; };
+};
+
 enum struct TokenType {
 	Integer,
 	BinaryOperator
@@ -29,7 +34,6 @@ struct Token {
 	TokenType type;
 	int value;
 	int index = -1;
-	bool visited = false;
 };
 
 using Tokens = std::vector<Token>;
@@ -37,8 +41,7 @@ using TokenIterator = Tokens::iterator;
 
 struct Node {
 	Node(TokenIterator it) : iterator(it) {
-		it->visited = true;
-		std::cout << "Node created: " << it->value << "\t\t" << it->index << '\t' << it->visited << '\n';
+		std::cout << "Node created: " << it->value << "\t\t" << it->index << '\n';
 	}
 	TokenIterator iterator;
 	Node* left = nullptr;
@@ -75,57 +78,54 @@ void printTokens(const Tokens &tokens) {
 	std::cout << "\n\n";
 }
 
-TokenIterator nextInt(TokenIterator first, TokenIterator last) {
-	return std::find_if(first, last, [](const Token& t) {
-		return !t.visited;
-	});
-}
-
 template<typename BidirectionalIterator>
 void buildTree(const BidirectionalIterator first, const BidirectionalIterator last, Node *node) {
+	S s(std::distance(first, last) );
 	if(first == last) return;
-	//std::cout << "call\n";
+
+	auto leftIt = std::prev(node->iterator);
+	for(; leftIt != first; leftIt--) {
+		if(leftIt->type == TokenType::BinaryOperator
+				&& highPrecedence(leftIt->value) ) {
+			std::cout << "L1: ";
+			node->left = new Node{leftIt};
+			buildTree(first, node->iterator, node->left);
+			break;
+		}
+	}
+
+	if(leftIt == first) {
+		std::cout << "L2: ";
+		node->left = new Node{first};
+	}
 
 	auto rightIt = std::next(node->iterator);
+	auto firstBinOp = last;
 	for(; rightIt != last; rightIt++) {
 		if(rightIt->type == TokenType::BinaryOperator
-				&& !rightIt->visited
 				&& !highPrecedence(rightIt->value) ) {
-			std::cout << "Right 1 ";
+			std::cout << "R1: ";
 			node->right = new Node{rightIt};
-			buildTree(first, last, node->right);	//Höger
-			buildLeft(first, last, node->right);
-			return;
-			//break;
+			buildTree(std::next(node->iterator), last, node->right);
+			break;
+		} else if(firstBinOp == last
+				&& rightIt->type == TokenType::BinaryOperator
+				&& highPrecedence(rightIt->value) ) {
+			firstBinOp = rightIt;
 		}
 	}
 
-	if(rightIt == last) {	//När höger tagit slut
-		std::cout << "Right 2 ";
-		node->right = new Node{nextInt(first, last)};
-	}
-
-	//std::cout << "end\n";
-}
-
-template<typename BidirectionalIterator>
-void buildLeft(const BidirectionalIterator first, const BidirectionalIterator last, Node *node) {
-	auto leftIt = first;
-	for(; leftIt != last; leftIt++) {
-		if(leftIt->type == TokenType::BinaryOperator
-				&& !leftIt->visited
-				&& highPrecedence(leftIt->value) ) {
-			std::cout << "Left 1 ";
-			node->left = new Node{leftIt};
-			buildTree(first, last, node->left);
+	if(rightIt == last) {
+		if(firstBinOp == last) {
+			std::cout << "R2: ";
+			node->right = new Node{std::prev(last) };
+		} else {
+			std::cout << "R3: ";
+			node->right = new Node{firstBinOp};
+			buildTree(std::next(node->iterator), last, node->right);
 		}
-		//std::cout << leftIt->value << " is not binop\n";
 	}
-
-	if(leftIt == last) {
-		std::cout << "Left 2 ";
-		node->left = new Node{nextInt(first, last)};
-	}
+	std::cout << "END\n";
 }
 
 Tokens shuntingYard(const Tokens &tokens) {
@@ -250,8 +250,8 @@ Tokens tokenize(const std::string &input) {
 
 int eval(Node *node) {
 	if(node->iterator->type == TokenType::BinaryOperator) {
-		int op2 = eval(node->left);
-		int op1 = eval(node->right);
+		int op1 = eval(node->left);
+		int op2 = eval(node->right);
 		int value = 0;
 
 		switch(node->iterator->value) {
@@ -279,7 +279,9 @@ void visit(Node *node) {
 	std::cout << node->iterator->value << '\n';
 	if(node->left && node->right) {
 		//std::cout << node->left->iterator->value << ' ' << node->right->iterator->value << '\n';
+		std::cout << "Left: ";
 		visit(node->left);
+		std::cout << "Right: ";
 		visit(node->right);
 	}
 }
@@ -301,17 +303,18 @@ int buildTree(Tokens &tokens) {
 		return t.type == TokenType::BinaryOperator && !highPrecedence(t.value);
 	});
 	if(it == tokens.end() ) {
-		it = std::find_if(tokens.begin(), tokens.end(), [](const Token t) {
-			return t.type == TokenType::BinaryOperator;
-		});
+		for(it = std::prev(tokens.end() ); it != tokens.begin(); it--) {
+			if(it->type == TokenType::BinaryOperator
+				&& highPrecedence(it->value) ) break;
+		}
+		if(it == tokens.begin() ) it = tokens.end();
 	}
 
 	if(it == tokens.end() ) return tokens.front().value;
 
 	Node *root = new Node{it};
 	buildTree(tokens.begin(), tokens.end(), root);
-	buildLeft(tokens.begin(), tokens.end(), root);
-	visit(root);
+	//visit(root);
 	int value = eval(root);
 	destroy(root);
 
