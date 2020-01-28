@@ -15,11 +15,6 @@ constexpr static std::array<char, 4> binaryOperators = {
 	'/'
 };
 
-struct S {
-	S(int i ) { std::cout << "New scope size " << i << '\n'; };
-	~S() { std::cout << "Scope destroyed\n"; };
-};
-
 enum struct TokenType {
 	Integer,
 	BinaryOperator
@@ -40,13 +35,9 @@ using Tokens = std::vector<Token>;
 using TokenIterator = Tokens::iterator;
 
 struct Node {
-	Node(TokenIterator it) : iterator(it) {
-		std::cout << "Node created: " << it->value << "\t\t" << it->index << '\n';
-	}
 	TokenIterator iterator;
 	Node* left = nullptr;
 	Node* right = nullptr;
-
 };
 
 constexpr std::string_view prefix = ">>>  ";
@@ -59,35 +50,23 @@ void printCarat(int index) {
 
 bool highPrecedence(int c) {
 	return c == '*' || c == '/';
-	/*
-	switch(c) {
-		case '*':
-		case '/':
-			return true;
-		default:
-			return false;
-	}
-	return false;
-	*/
 }
 
 void printTokens(const Tokens &tokens) {
 	for(auto t : tokens) {
-		std::cout << t.value << ' ';
+		std::cout << (t.type == TokenType::Integer 
+				? t.value : static_cast<char>(t.value) ) << ' ';
 	}
 	std::cout << "\n\n";
 }
 
-template<typename BidirectionalIterator>
-void buildTree(const BidirectionalIterator first, const BidirectionalIterator last, Node *node) {
-	S s(std::distance(first, last) );
+void buildTree(const TokenIterator first, const TokenIterator last, Node *node) {
 	if(first == last) return;
 
 	auto leftIt = std::prev(node->iterator);
 	for(; leftIt != first; leftIt--) {
 		if(leftIt->type == TokenType::BinaryOperator
 				&& highPrecedence(leftIt->value) ) {
-			std::cout << "L1: ";
 			node->left = new Node{leftIt};
 			buildTree(first, node->iterator, node->left);
 			break;
@@ -95,7 +74,6 @@ void buildTree(const BidirectionalIterator first, const BidirectionalIterator la
 	}
 
 	if(leftIt == first) {
-		std::cout << "L2: ";
 		node->left = new Node{first};
 	}
 
@@ -104,7 +82,6 @@ void buildTree(const BidirectionalIterator first, const BidirectionalIterator la
 	for(; rightIt != last; rightIt++) {
 		if(rightIt->type == TokenType::BinaryOperator
 				&& !highPrecedence(rightIt->value) ) {
-			std::cout << "R1: ";
 			node->right = new Node{rightIt};
 			buildTree(std::next(node->iterator), last, node->right);
 			break;
@@ -117,77 +94,12 @@ void buildTree(const BidirectionalIterator first, const BidirectionalIterator la
 
 	if(rightIt == last) {
 		if(firstBinOp == last) {
-			std::cout << "R2: ";
 			node->right = new Node{std::prev(last) };
 		} else {
-			std::cout << "R3: ";
 			node->right = new Node{firstBinOp};
 			buildTree(std::next(node->iterator), last, node->right);
 		}
 	}
-	std::cout << "END\n";
-}
-
-Tokens shuntingYard(const Tokens &tokens) {
-	Tokens output;
-	Tokens stack;
-
-	for(const auto &t : tokens) {
-		if(t.type == TokenType::Integer) {
-			output.push_back(t);
-		}
-		else if(t.type == TokenType::BinaryOperator) {
-			if(stack.empty() || (!stack.empty() && highPrecedence(stack.back().value ^ highPrecedence(t.value) ) ) ) {
-				stack.push_back(t);
-			} else {
-				output.push_back(stack.back() );
-				stack.pop_back();
-				stack.push_back(t);
-			}
-		}
-	}
-
-	while(!stack.empty() ) {
-		output.push_back(stack.back() );
-		stack.pop_back();
-	}
-
-	return output;
-}
-
-int evalRpn(const Tokens &tokens) {
-	std::vector<int> stack;
-
-	for(auto it = tokens.begin(); it != tokens.end(); it++) {
-		if(it->type == TokenType::Integer) {
-			stack.push_back(it->value);
-		} else {
-			int op2 = stack.back();
-			stack.pop_back();
-			int op1 = stack.back();
-			stack.pop_back();
-			int value = 0;
-
-			switch(it->value) {
-				case '+':
-					value = op1 + op2;
-					break;
-				case '-':
-					value = op1 - op2;
-					break;
-				case '*':
-					value = op1 * op2;
-					break;
-				case '/':
-					value = op1 / op2;
-					break;
-			}
-
-			stack.push_back(value);
-		}
-	}
-
-	return stack.front();
 }
 
 Tokens tokenize(const std::string &input) {
@@ -210,7 +122,7 @@ Tokens tokenize(const std::string &input) {
 		if(current == input.end() ) break;
 
 		start = current;
-		if(std::isdigit(*current) || *current == '-' && (tokens.empty() || tokens.back().type != TokenType::Integer) ) {
+		if(std::isdigit(*current) || (*current == '-' && (tokens.empty() || tokens.back().type != TokenType::Integer) ) ) {
 			token.index = std::distance(input.begin(), current);
 			if(!expecting(TokenType::Integer) ) {
 				return Tokens();
@@ -248,17 +160,19 @@ Tokens tokenize(const std::string &input) {
 	return tokens;
 }
 
-int eval(Node *node) {
+float eval(Node *node) {
 	if(node->iterator->type == TokenType::BinaryOperator) {
-		int op1 = eval(node->left);
-		int op2 = eval(node->right);
-		int value = 0;
+		float op1 = eval(node->left);
+		float op2 = eval(node->right);
+		//float op2 = eval(node->right, node->iterator->value == '-');
+		float value = 0;
 
 		switch(node->iterator->value) {
 			case '+':
 				value = op1 + op2;
 				break;
 			case '-':
+				//value = neg ? op1 + op2 : op1 - op2;
 				value = op1 - op2;
 				break;
 			case '*':
@@ -272,13 +186,12 @@ int eval(Node *node) {
 		return value;
 	}
 
-	return node->iterator->value;
+	return static_cast<float>(node->iterator->value);
 }
 
 void visit(Node *node) {
 	std::cout << node->iterator->value << '\n';
 	if(node->left && node->right) {
-		//std::cout << node->left->iterator->value << ' ' << node->right->iterator->value << '\n';
 		std::cout << "Left: ";
 		visit(node->left);
 		std::cout << "Right: ";
@@ -296,7 +209,7 @@ void destroy(Node *node) {
 	delete node;
 }
 
-int buildTree(Tokens &tokens) {
+float buildTree(Tokens &tokens) {
 	if(tokens.empty() ) return 0;
 
 	auto it = std::find_if(tokens.begin(), tokens.end(), [](const Token t) {
@@ -315,19 +228,16 @@ int buildTree(Tokens &tokens) {
 	Node *root = new Node{it};
 	buildTree(tokens.begin(), tokens.end(), root);
 	//visit(root);
-	int value = eval(root);
+	float value = eval(root);
 	destroy(root);
 
 	return value;
 }
 
-int parse(const std::string &str) {
+float parse(const std::string &str) {
 	Tokens tokens = tokenize(str);
-	printTokens(tokens);
-	//tokens = shuntingYard(tokens);
-	//if(tokens.empty() ) return std::numeric_limits<int>::max();
-
-	//return evalRpn(tokens);
+	if(tokens.empty() ) return std::numeric_limits<float>::max();
+	//printTokens(tokens);
 	return buildTree(tokens);
 }
 
@@ -335,9 +245,9 @@ int main() {
 	std::string input;
 	std::cout << prefix;
 	while(std::getline(std::cin, input) ) {
-		int value = parse(input);
+		float value = parse(input);
 		std::cout << " = ";
-		if(value == std::numeric_limits<int>::max() ) std::cerr << "ERROR" << '\n';
+		if(value == std::numeric_limits<float>::max() ) std::cerr << "ERROR" << '\n';
 		else std::cerr << value << '\n';
 		std::cout << prefix;
 	}
