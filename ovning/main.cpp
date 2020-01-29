@@ -1,5 +1,3 @@
-//1.6 1.7 1.8 Implementation, miljöer
-
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -8,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+constexpr std::string_view prefix = ">>>  ";
+
 constexpr static std::array<char, 4> binaryOperators = {
 	'+',
 	'-',
@@ -15,14 +15,14 @@ constexpr static std::array<char, 4> binaryOperators = {
 	'/'
 };
 
-enum struct TokenType {
-	Integer,
-	BinaryOperator
-};
-
 constexpr static std::array<std::string_view, 2> tokenStrings = {
 	"Integer",
 	"BinaryOperator"
+};
+
+enum struct TokenType {
+	Integer,
+	BinaryOperator
 };
 
 struct Token {
@@ -40,7 +40,15 @@ struct Node {
 	Node* right = nullptr;
 };
 
-constexpr std::string_view prefix = ">>>  ";
+template<typename ForwardIterator, typename UnaryPredicate>
+ForwardIterator rfind(const ForwardIterator first, const ForwardIterator last, UnaryPredicate pred) {
+	auto rend = std::prev(first);
+	auto rbegin = std::prev(last);
+	for(; rbegin != rend; rbegin--) {
+		if(pred(*rbegin) ) return rbegin;
+	}
+	return last;
+}
 
 void printCarat(int index) {
 	for(auto c : prefix) std::cerr << ' ';
@@ -52,6 +60,90 @@ bool highPrecedence(int c) {
 	return c == '*' || c == '/';
 }
 
+float eval(const TokenIterator first, const TokenIterator last) {
+	if(first == last) return 0.f;
+	if(first + 1 == last) return first->value;
+
+	auto it = rfind(first, last, [](const Token t) {
+		return t.type == TokenType::BinaryOperator && !highPrecedence(t.value);
+	});
+
+	if(it == last) {
+		it = rfind(first, last, [](const Token t) {
+			return t.type == TokenType::BinaryOperator && highPrecedence(t.value);
+		});
+	}
+
+	float op1 = eval(first, it);
+	float op2 = eval(std::next(it), last);
+	float value;
+
+	switch(it->value) {
+		case '+':
+			value = op1 + op2;
+			break;
+		case '-':
+			value = op1 - op2;
+			break;
+		case '*':
+			value = op1 * op2;
+			break;
+		case '/':
+			value = op1 / op2;
+			break;
+	}
+
+	return value;
+}
+
+float eval(Node *node) {
+	if(node->iterator->type == TokenType::BinaryOperator) {
+		float op1 = eval(node->left);
+		float op2 = eval(node->right);
+		float value = 0;
+
+		switch(node->iterator->value) {
+			case '+':
+				value = op1 + op2;
+				break;
+			case '-':
+				value = op1 - op2;
+				break;
+			case '*':
+				value = op1 * op2;
+				break;
+			case '/':
+				value = op1 / op2;
+				break;
+		}
+
+		return value;
+	}
+
+	return static_cast<float>(node->iterator->value);
+}
+
+void visit(Node *node) {
+	std::cout << node->iterator->value << '\n';
+	if(node->left && node->right) {
+		std::cout << "Left: ";
+		visit(node->left);
+		std::cout << "Right: ";
+		visit(node->right);
+	}
+}
+
+void destroy(Node *node) {
+	if(node->left) {
+		destroy(node->left);
+	}
+	if(node->right) {
+		destroy(node->right);
+	}
+	delete node;
+}
+
+
 void printTokens(const Tokens &tokens) {
 	for(auto t : tokens) {
 		std::cout << (t.type == TokenType::Integer 
@@ -60,46 +152,34 @@ void printTokens(const Tokens &tokens) {
 	std::cout << "\n\n";
 }
 
-void buildTree(const TokenIterator first, const TokenIterator last, Node *node) {
-	if(first == last) return;
+Node* buildTree(const TokenIterator first, const TokenIterator last) {
+	if(first == last) return nullptr;
+	if(first + 1 == last) return new Node{first};
 
-	auto leftIt = std::prev(node->iterator);
-	for(; leftIt != first; leftIt--) {
-		if(leftIt->type == TokenType::BinaryOperator
-				&& highPrecedence(leftIt->value) ) {
-			node->left = new Node{leftIt};
-			buildTree(first, node->iterator, node->left);
-			break;
-		}
+	auto it = rfind(first, last, [](const Token t) {
+		return t.type == TokenType::BinaryOperator && !highPrecedence(t.value);
+	});
+
+	if(it == last) {
+		it = rfind(first, last, [](const Token t) {
+			return t.type == TokenType::BinaryOperator && highPrecedence(t.value);
+		});
 	}
 
-	if(leftIt == first) {
-		node->left = new Node{first};
-	}
+	Node *node = new Node{it};
+	node->left = buildTree(first, it);
+	node->right = buildTree(std::next(it), last);
 
-	auto rightIt = std::next(node->iterator);
-	auto firstBinOp = last;
-	for(; rightIt != last; rightIt++) {
-		if(rightIt->type == TokenType::BinaryOperator
-				&& !highPrecedence(rightIt->value) ) {
-			node->right = new Node{rightIt};
-			buildTree(std::next(node->iterator), last, node->right);
-			break;
-		} else if(firstBinOp == last
-				&& rightIt->type == TokenType::BinaryOperator
-				&& highPrecedence(rightIt->value) ) {
-			firstBinOp = rightIt;
-		}
-	}
+	return node;
+}
 
-	if(rightIt == last) {
-		if(firstBinOp == last) {
-			node->right = new Node{std::prev(last) };
-		} else {
-			node->right = new Node{firstBinOp};
-			buildTree(std::next(node->iterator), last, node->right);
-		}
-	}
+float buildTree(Tokens &tokens) {
+	if(tokens.empty() ) return 0;
+	auto root = buildTree(tokens.begin(), tokens.end() );
+	float value = eval(root);
+	destroy(root);
+
+	return value;
 }
 
 Tokens tokenize(const std::string &input) {
@@ -160,85 +240,12 @@ Tokens tokenize(const std::string &input) {
 	return tokens;
 }
 
-float eval(Node *node) {
-	if(node->iterator->type == TokenType::BinaryOperator) {
-		float op1 = eval(node->left);
-		float op2 = eval(node->right);
-		//float op2 = eval(node->right, node->iterator->value == '-');
-		float value = 0;
-
-		switch(node->iterator->value) {
-			case '+':
-				value = op1 + op2;
-				break;
-			case '-':
-				//value = neg ? op1 + op2 : op1 - op2;
-				value = op1 - op2;
-				break;
-			case '*':
-				value = op1 * op2;
-				break;
-			case '/':
-				value = op1 / op2;
-				break;
-		}
-
-		return value;
-	}
-
-	return static_cast<float>(node->iterator->value);
-}
-
-void visit(Node *node) {
-	std::cout << node->iterator->value << '\n';
-	if(node->left && node->right) {
-		std::cout << "Left: ";
-		visit(node->left);
-		std::cout << "Right: ";
-		visit(node->right);
-	}
-}
-
-void destroy(Node *node) {
-	if(node->left) {
-		destroy(node->left);
-	}
-	if(node->right) {
-		destroy(node->right);
-	}
-	delete node;
-}
-
-float buildTree(Tokens &tokens) {
-	if(tokens.empty() ) return 0;
-
-	auto it = std::find_if(tokens.begin(), tokens.end(), [](const Token t) {
-		return t.type == TokenType::BinaryOperator && !highPrecedence(t.value);
-	});
-	if(it == tokens.end() ) {
-		for(it = std::prev(tokens.end() ); it != tokens.begin(); it--) {
-			if(it->type == TokenType::BinaryOperator
-				&& highPrecedence(it->value) ) break;
-		}
-		if(it == tokens.begin() ) it = tokens.end();
-	}
-
-	if(it == tokens.end() ) return tokens.front().value;
-
-	Node *root = new Node{it};
-	buildTree(tokens.begin(), tokens.end(), root);
-	//visit(root);
-	float value = eval(root);
-	destroy(root);
-
-	return value;
-}
-
 float parse(const std::string &str) {
 	Tokens tokens = tokenize(str);
 	if(tokens.empty() ) return std::numeric_limits<float>::max();
 	//printTokens(tokens);
-	return buildTree(tokens);
+	//return buildTree(tokens);
+	return eval(tokens.begin(), tokens.end() );
 }
 
 int main() {
