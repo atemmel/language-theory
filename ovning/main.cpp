@@ -60,6 +60,20 @@ bool highPrecedence(int c) {
 	return c == '*' || c == '/';
 }
 
+float calc(float op1, float op2, int binOp) {
+	switch(binOp) {
+		case '+':
+			return op1 + op2;
+		case '-':
+			return op1 - op2;
+		case '*':
+			return op1 * op2;
+		case '/':
+			return op1 / op2;
+	}
+	return 0.f;
+}
+
 float eval(const TokenIterator first, const TokenIterator last) {
 	if(first == last) return 0.f;
 	if(first + 1 == last) return first->value;
@@ -76,48 +90,14 @@ float eval(const TokenIterator first, const TokenIterator last) {
 
 	float op1 = eval(first, it);
 	float op2 = eval(std::next(it), last);
-	float value;
-
-	switch(it->value) {
-		case '+':
-			value = op1 + op2;
-			break;
-		case '-':
-			value = op1 - op2;
-			break;
-		case '*':
-			value = op1 * op2;
-			break;
-		case '/':
-			value = op1 / op2;
-			break;
-	}
-
-	return value;
+	return calc(op1, op2, it->value);
 }
 
 float eval(Node *node) {
 	if(node->iterator->type == TokenType::BinaryOperator) {
 		float op1 = eval(node->left);
 		float op2 = eval(node->right);
-		float value = 0;
-
-		switch(node->iterator->value) {
-			case '+':
-				value = op1 + op2;
-				break;
-			case '-':
-				value = op1 - op2;
-				break;
-			case '*':
-				value = op1 * op2;
-				break;
-			case '/':
-				value = op1 / op2;
-				break;
-		}
-
-		return value;
+		return calc(op1, op2, node->iterator->value);
 	}
 
 	return static_cast<float>(node->iterator->value);
@@ -142,7 +122,6 @@ void destroy(Node *node) {
 	}
 	delete node;
 }
-
 
 void printTokens(const Tokens &tokens) {
 	for(auto t : tokens) {
@@ -169,7 +148,6 @@ Node* buildTree(const TokenIterator first, const TokenIterator last) {
 	Node *node = new Node{it};
 	node->left = buildTree(first, it);
 	node->right = buildTree(std::next(it), last);
-
 	return node;
 }
 
