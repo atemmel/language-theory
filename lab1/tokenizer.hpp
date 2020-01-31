@@ -19,7 +19,6 @@ namespace TokenType {
 	constexpr Type Error				= 1 << 9;
 };
 
-
 struct Token {
 	TokenType::Type type;
 	std::string value;

@@ -99,26 +99,33 @@ bool Tokenizer::done() {
 Token Tokenizer::buildCounterToken() {
 	auto start = iterator;
 	Token token;
-	while(!done() && std::isdigit(get() ) );
+	while(!done() && std::isdigit(peek() ) ) {
+		get();
+	}
 	if(peek() == '}') {
 		token.type = TokenType::Counter;
 		token.value.assign(start, iterator);
 	} else token.type = TokenType::Error;
+	get();
 	return token;
 }
 
 Token Tokenizer::buildEscapeToken() {
-	Token token;
+	Token token, counter;
+	token.type = TokenType::Error;
 	char c = get();
 	switch(c) {
 		case 'I':
 			token.type = TokenType::CaseInsensitive;
 			break;
 		case 'O':
-			token.type = TokenType::SelectionGroup;
-			break;
-		default:
-			token.type = TokenType::Error;
+			if(peek() != '{') break;
+			get();
+			counter = buildCounterToken();
+			if(counter.type == TokenType::Counter) {
+				token.type = TokenType::SelectionGroup;
+				token.value = counter.value;
+			}
 			break;
 	}
 	return token;

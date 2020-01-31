@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 	std::copy(argv + 1, argv + argc, args.begin() );
 
 	Tokenizer tokenizer;
-	auto tokens = tokenizer.tokenize(args.front() );
+	Tokens tokens = tokenizer.tokenize(args.front() );
 	tokenizer.print();
 
 	std::puts("==================");
