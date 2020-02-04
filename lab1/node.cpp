@@ -24,38 +24,153 @@ Token *Parser::getIf(TokenType::Type token) {
 Child Parser::buildProgram() {
 	Child program = std::make_unique<NodeProgram>();
 	for(;;) {
-		Child expression = buildExpression();
-		if(!expression) return nullptr;
-		program->addChild(std::move(expression) );
+		Child child = buildExpression();
+		if(!child) {
+			child = buildSelectionGroup();
+		}
+		if(!child) {
+			return nullptr;
+		}
+		program->addChild(std::move(child) );
 		if(end() ) break;
 	}
 	return program;
 }
 
 Child Parser::buildExpression() {
-	Token *token = nullptr;
-	token = getIf(TokenType::String);
-	if(token) {
-		if(getIf(TokenType::CaseInsensitive) ) {
-			Child caseIns = std::make_unique<NodeCaseInsensitive>();
-			caseIns->addChild(std::move(buildString(token->value) ) );
-			return caseIns;
-		} else if(getIf(TokenType::Repeated) ) {
-			Child repeated = std::make_unique<NodeRepeated>();
-			repeated->addChild(std::move(buildString(token->value) ) );
-			return repeated;
-		} else if(getIf(TokenType::Either) ) {
-			Child either = std::make_unique<NodeEither>();
-			either->addChild(std::move(buildString(token->value) ) );
-			either->addChild(std::move(buildExpression() ) );
-			return either;
-		}else if(end() ){
-			return buildString(token->value);
+	Child child = buildString();
+	if(child) {
+		Child parent = buildInsensitive(child);
+		if(!parent) {
+			parent = buildRepeated(child);
 		}
+		if(!parent) {
+			parent = buildEither(child);
+		}
+		if(parent) {
+			return parent;
+		}
+		return child;
+	} 
+
+	child = buildWildcard();
+	if(child) {
+		Child parent = buildRepeated(child);
+		if(!parent) {
+			std::cout << "Building counter\n";
+			parent = buildCounter(child);
+		}
+		if(parent) {
+			return parent;
+		}
+		return child;
 	}
+
+	child = buildGrouping();
+	if(child) {
+		return child;
+	}
+
 	return nullptr;
 }
 
-Child Parser::buildString(const std::string &string) {
-	return std::make_unique<NodeString>(string);
+Child Parser::buildSelectionGroup() {
+	Token *token = getIf(TokenType::SelectionGroup);
+	if(!token) {
+		return nullptr;
+	}
+	auto selGroup = std::make_unique<NodeSelectionGroup>();
+	try {
+		selGroup->value = std::stoi(token->value);
+	} catch(...) {
+		return nullptr;
+	}
+	return selGroup;
+}
+
+Child Parser::buildGrouping() {
+	if(!getIf(TokenType::LParen) ) {
+		return nullptr;
+	}
+	Child child = buildExpression();
+	if(!child || !getIf(TokenType::RParen) ) {
+		return nullptr;
+	}
+	Child parent = std::make_unique<NodeGrouping>();
+	parent->addChild(std::move(child) );
+
+	Child grandparent = buildRepeated(parent);
+	if(!grandparent) {
+		grandparent = buildInsensitive(parent);
+	}
+	if(!grandparent) {
+		grandparent = buildEither(parent);
+	}
+	if(grandparent) {
+		return grandparent;
+	}
+	return parent;
+}
+
+Child Parser::buildInsensitive(Child &child) {
+	if(!getIf(TokenType::CaseInsensitive) ) return nullptr;
+	Child caseIns = std::make_unique<NodeCaseInsensitive>();
+	caseIns->addChild(std::move(child) );
+
+	Child grandparent = buildRepeated(caseIns);
+	if(!grandparent)
+		grandparent = buildEither(caseIns);
+	if(grandparent) {
+		return grandparent;
+	}
+	return caseIns;
+}
+
+Child Parser::buildRepeated(Child &child) {
+	if(!getIf(TokenType::Repeated) ) return nullptr;
+	Child repeat = std::make_unique<NodeRepeated>();
+	repeat->addChild(std::move(child) );
+
+	Child grandparent = buildInsensitive(repeat);
+	if(!grandparent)
+		grandparent = buildEither(repeat);
+	if(grandparent) {
+		return grandparent;
+	}
+	return repeat;
+}
+
+Child Parser::buildEither(Child &child) {
+	if(!getIf(TokenType::Either) ) return nullptr;
+	Child either = std::make_unique<NodeEither>();
+	either->addChild(std::move(child) );
+	either->addChild(std::move(buildExpression() ) );
+	return either;
+}
+
+Child Parser::buildCounter(Child &child) {
+	Token *token = getIf(TokenType::Counter);
+	if(!token) {
+		return nullptr;
+	}
+	auto counter = std::make_unique<NodeCounter>();
+	try {
+		counter->value = std::stoi(token->value);
+	} catch(...) {
+		return nullptr;
+	}
+	counter->addChild(std::move(child) );
+	return counter;
+}
+
+Child Parser::buildString() {
+	Token *token = getIf(TokenType::String);
+	if(!token) {
+		return nullptr;
+	}
+	return std::make_unique<NodeString>(token->value);
+}
+
+Child Parser::buildWildcard() {
+	return getIf(TokenType::Wildcard) ? std::make_unique<NodeWildcard>() : nullptr;
 }

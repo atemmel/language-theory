@@ -22,6 +22,13 @@ public:
 	void eval() override {};
 };
 
+class NodeSelectionGroup : public Node {
+public:
+	void print() override { std::cout << "SelectionGroup : " << value << '\n'; }
+	void eval() override {};
+	int value = 0;
+};
+
 class NodeGrouping : public Node {
 public:
 	void print() override { std::cout << "Grouping\n"; }
@@ -45,12 +52,26 @@ public:
 	void print() override { std::cout << "Either\n"; }
 	void eval() override {};
 };
+
+class NodeCounter : public Node {
+public:
+	void print() override { std::cout << "Counter : " << value << '\n'; }
+	void eval() override {};
+	int value = 0;
+};
+
 class NodeString: public Node {
 public:
 	NodeString(const std::string &str) : value(str) {};
 	void print() override { std::cout << "String : " << value << '\n'; }
 	void eval() override {};
 	std::string value;
+};
+
+class NodeWildcard: public Node {
+public:
+	void print() override { std::cout << "Wildcard\n"; }
+	void eval() override {};
 };
 
 class Parser {
@@ -61,7 +82,14 @@ private:
 	Token *getIf(TokenType::Type token);
 	Child buildProgram();
 	Child buildExpression();
-	Child buildString(const std::string &string);
+	Child buildSelectionGroup();
+	Child buildGrouping();
+	Child buildInsensitive(Child &child);
+	Child buildRepeated(Child &child);
+	Child buildEither(Child &child);
+	Child buildCounter(Child &child);
+	Child buildString();
+	Child buildWildcard();
 
 	Tokens tokens;
 	TokenIterator iterator;
