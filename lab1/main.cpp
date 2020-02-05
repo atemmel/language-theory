@@ -56,9 +56,11 @@ Waterloo finally facing my Waterloo";
 
 	puts(std::string(input.size(), '=').c_str() );
 
-	auto spans = root->eval(input.begin(), input.end() );
+	State state;
+	auto spans = root->eval(input.begin(), input.end(), state);
 	for(auto s : spans) {
 		std::cout << '{' << s << "} ";
+		std::cout << std::string(s.first, s.last) << ' ';
 	}
 	std::cout << '\n';
 

@@ -30,10 +30,14 @@ using Spans = std::vector<Span>;
 Spans removeSubsets(const Spans &spans, const Spans &filter);
 Spans merge(const Spans &spans1, const Spans &spans2);
 
+struct State {
+	bool upper = false;
+};
+
 class Node {
 public:
 	virtual void print() = 0;
-	virtual Spans eval(Iterator first, Iterator last) = 0;
+	virtual Spans eval(Iterator first, Iterator last, State &state) = 0;
 	void addChild(Child child);
 	std::vector<Child> children;
 };
@@ -41,10 +45,10 @@ public:
 class NodeProgram : public Node {
 public:
 	void print() override { std::cout << "Program\n"; }
-	Spans eval(Iterator first, Iterator last) override { 
+	Spans eval(Iterator first, Iterator last, State &state) override { 
 		Spans superset;
 		for(auto &child : children) {
-			Spans subset = child->eval(first, last);
+			Spans subset = child->eval(first, last, state);
 			superset = merge(superset, subset);
 		}
 		return superset;
@@ -54,7 +58,7 @@ public:
 class NodeSelectionGroup : public Node {
 public:
 	void print() override { std::cout << "SelectionGroup : " << value << '\n'; }
-	Spans eval(Iterator first, Iterator last) override { 
+	Spans eval(Iterator first, Iterator last, State &state) override { 
 		return Spans();
 	}
 	int value = 0;
@@ -63,7 +67,7 @@ public:
 class NodeGrouping : public Node {
 public:
 	void print() override { std::cout << "Grouping\n"; }
-	Spans eval(Iterator first, Iterator last) override { 
+	Spans eval(Iterator first, Iterator last, State &state) override { 
 		return Spans(); 
 	}
 };
@@ -71,16 +75,27 @@ public:
 class NodeCaseInsensitive: public Node {
 public:
 	void print() override { std::cout << "CaseInsensitive\n"; }
-	Spans eval(Iterator first, Iterator last) override { 
-		return Spans(); 
+	Spans eval(Iterator first, Iterator last, State &state) override { 
+		std::string upper(first, last);
+		std::transform(first, last, upper.begin(), ::toupper);
+		state.upper = true;
+		Spans spans = children.front()->eval(upper.begin(), upper.end(), state);
+		state.upper = false;
+		Spans translated;
+		for(auto s : spans) {
+			Span t{first + std::distance(upper.cbegin(), s.first),
+				first + std::distance(upper.cbegin(), s.last) };
+			translated.push_back(t);
+		}
+		return translated; 
 	}
 };
 
 class NodeRepeated: public Node {
 public:
 	void print() override { std::cout << "Repeated\n"; }
-	Spans eval(Iterator first, Iterator last) override { 
-		Spans spans = children.front()->eval(first, last);
+	Spans eval(Iterator first, Iterator last, State &state) override { 
+		Spans spans = children.front()->eval(first, last, state);
 		Spans output;
 
 		//Edge case
@@ -101,10 +116,10 @@ public:
 class NodeEither: public Node {
 public:
 	void print() override { std::cout << "Either\n"; }
-	Spans eval(Iterator first, Iterator last) override { 
+	Spans eval(Iterator first, Iterator last, State &state) override { 
 		Spans sum;
 		for(auto &child : children) {
-			Spans result = child->eval(first, last);
+			Spans result = child->eval(first, last, state);
 			sum = merge(sum, result);
 		}
 		sum.erase(std::unique(sum.begin(), sum.end() ), sum.end() );
@@ -115,7 +130,7 @@ public:
 class NodeCounter : public Node {
 public:
 	void print() override { std::cout << "Counter : " << value << '\n'; }
-	Spans eval(Iterator first, Iterator last) override { return Spans(); }
+	Spans eval(Iterator first, Iterator last, State &state) override { return Spans(); }
 	int value = 0;
 };
 
@@ -123,8 +138,11 @@ class NodeString: public Node {
 public:
 	NodeString(const std::string &str) : value(str) {};
 	void print() override { std::cout << "String : " << value << '\n'; }
-	Spans eval(Iterator first, Iterator last) override { 
+	Spans eval(Iterator first, Iterator last, State &state) override { 
 		Spans matches;
+		if(state.upper) {
+			std::transform(value.begin(), value.end(), value.begin(), ::toupper);
+		}
 		for(; first <= last; first++) {
 			auto it = std::search(first, last, std::boyer_moore_searcher(
 			   value.cbegin(), value.cend() ) );
@@ -141,7 +159,7 @@ public:
 class NodeWildcard: public Node {
 public:
 	void print() override { std::cout << "Wildcard\n"; }
-	Spans eval(Iterator first, Iterator last) override { 
+	Spans eval(Iterator first, Iterator last, State &state) override { 
 		Spans result;
 		for(; first != last; first++) {
 			result.push_back({first, std::next(first) });

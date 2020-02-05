@@ -85,6 +85,9 @@ Child Parser::buildExpression() {
 		if(!parent) {
 			parent = buildCounter(child);
 		}
+		if(!parent) {
+			parent = buildEither(child);
+		}
 		if(parent) {
 			return parent;
 		}
