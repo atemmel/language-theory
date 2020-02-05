@@ -1,5 +1,10 @@
 #include "node.hpp"
-#include "tokenizer.hpp"
+
+#include <string_view>
+
+constexpr std::string_view Blue = "\x1B[34m";
+constexpr std::string_view Cyan = "\x1B[36m";
+constexpr std::string_view Reset = "\x1B[0m";
 
 struct Scope {
 	Scope() { ++depth; }
@@ -41,6 +46,36 @@ int main(int argc, char **argv) {
 	Parser parser;
 	auto root = parser.parseTokens(std::move(tokens) );
 	visit(root.get() );
+
+
+	std::string input = "Waterloo I was defeated, you won the war \
+Waterloo promise to love you for ever more \
+Waterloo couldn't escape if I wanted to \
+Waterloo knowing my fate is to be with you \
+Waterloo finally facing my Waterloo";
+
+	puts(std::string(input.size(), '=').c_str() );
+
+	auto spans = root->eval(input.begin(), input.end() );
+	for(auto s : spans) {
+		std::cout << '{' << s << "} ";
+	}
+	std::cout << '\n';
+
+	puts(std::string(input.size(), '=').c_str() );
+	auto it = input.cbegin();
+	int i = 0;
+	for(auto s : spans) {
+		if(it > s.first) {
+			continue;
+		}
+		std::cout << std::string(it, s.first) << (i % 2 ? Blue : Cyan) 
+			<< std::string(s.first, s.last) << Reset;
+		it = s.last;
+		i++;
+	}
+	std::cout << std::string(it, input.cend() ) << '\n';
+	puts(std::string(input.size(), '=').c_str() );
 
 	return EXIT_SUCCESS;
 }

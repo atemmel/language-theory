@@ -1,5 +1,31 @@
 #include "node.hpp"
 
+std::ostream &operator<<(std::ostream &os, Span s) {
+	return os << std::distance(s.first, s.last);
+}
+
+Spans removeSubsets(const Spans &spans, const Spans &filter) {
+	if(filter.empty() ) return spans;
+	Spans output;
+	for(auto s : spans) {
+		for(auto t : filter) {
+			if(!s.isSubset(t) ) {
+				output.push_back(s);
+			}
+		}
+	}
+	return output;
+}
+
+Spans merge(const Spans &spans1, const Spans &spans2) {
+	Spans clean1 = removeSubsets(spans1, spans2);
+	Spans clean2 = removeSubsets(spans2, clean1);
+	Spans set(clean1.size() + clean2.size() );
+	std::merge(clean1.cbegin(), clean1.cend(), clean2.cbegin(),
+			clean2.cend(), set.begin() );
+	return set;
+}
+
 void Node::addChild(Child child) {
 	children.push_back(std::move(child) );
 }
@@ -22,7 +48,7 @@ Token *Parser::getIf(TokenType::Type token) {
 }
 
 Child Parser::buildProgram() {
-	Child program = std::make_unique<NodeProgram>();
+	auto program = std::make_unique<NodeProgram>();
 	for(;;) {
 		Child child = buildExpression();
 		if(!child) {
@@ -57,7 +83,6 @@ Child Parser::buildExpression() {
 	if(child) {
 		Child parent = buildRepeated(child);
 		if(!parent) {
-			std::cout << "Building counter\n";
 			parent = buildCounter(child);
 		}
 		if(parent) {
