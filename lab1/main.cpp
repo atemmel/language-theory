@@ -6,14 +6,6 @@ constexpr std::string_view Blue = "\x1B[34m";
 constexpr std::string_view Cyan = "\x1B[36m";
 constexpr std::string_view Reset = "\x1B[0m";
 
-struct Scope {
-	Scope() { ++depth; }
-	~Scope() { --depth; }
-	static size_t depth;
-};
-
-size_t Scope::depth = 0;
-
 void visit(Node *node) {
 	Scope scope;
 	if(!node) {

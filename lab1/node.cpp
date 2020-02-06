@@ -1,5 +1,7 @@
 #include "node.hpp"
 
+size_t Scope::depth = 0;
+
 std::ostream &operator<<(std::ostream &os, Span s) {
 	return os << std::distance(s.first, s.last);
 }

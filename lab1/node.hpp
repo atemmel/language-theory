@@ -23,6 +23,12 @@ struct Span {
 	}
 };
 
+struct Scope {
+	Scope() { ++depth; }
+	~Scope() { --depth; }
+	static size_t depth;
+};
+
 std::ostream &operator<<(std::ostream &os, Span s);
 
 using Spans = std::vector<Span>;
@@ -47,41 +53,33 @@ class NodeProgram : public Node {
 public:
 	void print() override { std::cout << "Program\n"; }
 	Spans eval(Iterator first, Iterator last, State &state) override { 
-		/*
-		Spans super = children[state.index]->eval(first, last, state);
-		index++;
-		if(state.index == children.size() ) return super;
-		Spans subset = children[state.index]->eval(super.front().first, last, state);
-		for(auto s : subset) {
-			Spans subsubset = 
-		}
-		superset = merge(superset, subset);
-		return superset;
-		*/
-		if(state.index == children.size() ) return Spans();
 		Spans spans = children[state.index]->eval(first, last, state);
+		//std::cout << state.index << " gave " << spans.size() << '\n';
 		state.index++;
+		if(state.index == children.size() ) {
+			state.index--;
+			return spans;
+		}
 		Spans sum;
 		for(auto s : spans) {
-			Spans term = children[state.index]->eval(s.last, last, state);
-			if(!term.empty() ) {
+			std::cout << "s " << s << ' ' << std::string(s.first, s.last) << "\n\n";
+			Spans term;
+			if(s.last == last) {
+				term = eval(s.first, last, state);
+				for(auto t : term) {
+					sum.push_back({s.first, t.last});
+				}
+			} else {
+				term = eval(s.last, last, state);
 				for(auto t : term) {
 					if(s.last == t.first) {
+						std::cout << "t " << t << ' ' << std::string(t.first, t.last) << "\n\n";
 						sum.push_back({s.first, t.last});
 					}
 				}
 			}
 		}
 		return sum;
-		/*
-		Spans sum;
-		for(auto &child : children) {
-			Spans result = child->eval(first, last, state);
-			sum = merge(sum, result);
-		}
-		sum.erase(std::unique(sum.begin(), sum.end() ), sum.end() );
-		return sum; 
-		*/
 	}
 };
 
@@ -170,6 +168,7 @@ public:
 	NodeString(const std::string &str) : value(str) {};
 	void print() override { std::cout << "String : " << value << '\n'; }
 	Spans eval(Iterator first, Iterator last, State &state) override { 
+		std::cout << "ATTEMPT MATCH " << value << '\n';
 		Spans matches;
 		if(state.upper) {
 			std::transform(value.begin(), value.end(), value.begin(), ::toupper);
@@ -178,6 +177,7 @@ public:
 			auto it = std::search(first, last, std::boyer_moore_searcher(
 			   value.cbegin(), value.cend() ) );
 			if(it != last) {
+				std::cout << "MATCH: " << std::string(it, it + value.size() ) << '\n';
 				matches.push_back({it, it + value.size()} );
 			}
 			first = it;
