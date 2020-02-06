@@ -32,6 +32,7 @@ Spans merge(const Spans &spans1, const Spans &spans2);
 
 struct State {
 	bool upper = false;
+	size_t index = 0;
 };
 
 class Node {
@@ -46,12 +47,41 @@ class NodeProgram : public Node {
 public:
 	void print() override { std::cout << "Program\n"; }
 	Spans eval(Iterator first, Iterator last, State &state) override { 
-		Spans superset;
-		for(auto &child : children) {
-			Spans subset = child->eval(first, last, state);
-			superset = merge(superset, subset);
+		/*
+		Spans super = children[state.index]->eval(first, last, state);
+		index++;
+		if(state.index == children.size() ) return super;
+		Spans subset = children[state.index]->eval(super.front().first, last, state);
+		for(auto s : subset) {
+			Spans subsubset = 
 		}
+		superset = merge(superset, subset);
 		return superset;
+		*/
+		if(state.index == children.size() ) return Spans();
+		Spans spans = children[state.index]->eval(first, last, state);
+		state.index++;
+		Spans sum;
+		for(auto s : spans) {
+			Spans term = children[state.index]->eval(s.last, last, state);
+			if(!term.empty() ) {
+				for(auto t : term) {
+					if(s.last == t.first) {
+						sum.push_back({s.first, t.last});
+					}
+				}
+			}
+		}
+		return sum;
+		/*
+		Spans sum;
+		for(auto &child : children) {
+			Spans result = child->eval(first, last, state);
+			sum = merge(sum, result);
+		}
+		sum.erase(std::unique(sum.begin(), sum.end() ), sum.end() );
+		return sum; 
+		*/
 	}
 };
 
@@ -68,7 +98,8 @@ class NodeGrouping : public Node {
 public:
 	void print() override { std::cout << "Grouping\n"; }
 	Spans eval(Iterator first, Iterator last, State &state) override { 
-		return Spans(); 
+		//TODO: Do more work here
+		return children.front()->eval(first, last, state); 
 	}
 };
 

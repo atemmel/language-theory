@@ -54,7 +54,7 @@ Waterloo couldn't escape if I wanted to \
 Waterloo knowing my fate is to be with you \
 Waterloo finally facing my Waterloo";
 
-	puts(std::string(input.size(), '=').c_str() );
+	puts(std::string(args.front().size(), '=').c_str() );
 
 	State state;
 	auto spans = root->eval(input.begin(), input.end(), state);
@@ -64,7 +64,8 @@ Waterloo finally facing my Waterloo";
 	}
 	std::cout << '\n';
 
-	puts(std::string(input.size(), '=').c_str() );
+	puts(std::string(args.front().size(), '=').c_str() );
+
 	auto it = input.cbegin();
 	int i = 0;
 	for(auto s : spans) {
@@ -77,7 +78,8 @@ Waterloo finally facing my Waterloo";
 		i++;
 	}
 	std::cout << std::string(it, input.cend() ) << '\n';
-	puts(std::string(input.size(), '=').c_str() );
+
+	puts(std::string(args.front().size(), '=').c_str() );
 
 	return EXIT_SUCCESS;
 }
