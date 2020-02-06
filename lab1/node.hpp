@@ -54,7 +54,6 @@ public:
 	void print() override { std::cout << "Program\n"; }
 	Spans eval(Iterator first, Iterator last, State &state) override { 
 		Spans spans = children[state.index]->eval(first, last, state);
-		//std::cout << state.index << " gave " << spans.size() << '\n';
 		state.index++;
 		if(state.index == children.size() ) {
 			state.index--;
@@ -62,20 +61,12 @@ public:
 		}
 		Spans sum;
 		for(auto s : spans) {
-			std::cout << "s " << s << ' ' << std::string(s.first, s.last) << "\n\n";
-			Spans term;
-			if(s.last == last) {
-				term = eval(s.first, last, state);
-				for(auto t : term) {
+			Spans term = s.last == last 
+				? eval(s.first, last, state)
+				: eval(s.last, last, state);
+			for(auto t : term) {
+				if(s.last == last || s.last == t.first) {
 					sum.push_back({s.first, t.last});
-				}
-			} else {
-				term = eval(s.last, last, state);
-				for(auto t : term) {
-					if(s.last == t.first) {
-						std::cout << "t " << t << ' ' << std::string(t.first, t.last) << "\n\n";
-						sum.push_back({s.first, t.last});
-					}
 				}
 			}
 		}
@@ -168,7 +159,6 @@ public:
 	NodeString(const std::string &str) : value(str) {};
 	void print() override { std::cout << "String : " << value << '\n'; }
 	Spans eval(Iterator first, Iterator last, State &state) override { 
-		std::cout << "ATTEMPT MATCH " << value << '\n';
 		Spans matches;
 		if(state.upper) {
 			std::transform(value.begin(), value.end(), value.begin(), ::toupper);
@@ -177,7 +167,6 @@ public:
 			auto it = std::search(first, last, std::boyer_moore_searcher(
 			   value.cbegin(), value.cend() ) );
 			if(it != last) {
-				std::cout << "MATCH: " << std::string(it, it + value.size() ) << '\n';
 				matches.push_back({it, it + value.size()} );
 			}
 			first = it;
