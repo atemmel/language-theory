@@ -37,7 +37,12 @@ int main(int argc, char **argv) {
 
 	Parser parser;
 	auto root = parser.parseTokens(std::move(tokens) );
-	visit(root.get() );
+	if(!root) {
+		parser.printErr();
+		return EXIT_FAILURE;
+	} else {
+		visit(root.get() );
+	}
 
 
 	std::string input = "Waterloo I was defeated, you won the war \
@@ -45,9 +50,34 @@ Waterloo promise to love you for ever more \
 Waterloo couldn't escape if I wanted to \
 Waterloo knowing my fate is to be with you \
 Waterloo finally facing my Waterloo";
+	State::strBegin = input.begin();
+	State::strEnd = input.end();
 
 	puts(std::string(args.front().size(), '=').c_str() );
 
+	Span span = root->eval({input.cbegin(), input.cend()});
+
+	for(auto & vec : State::groupings) {
+		for(auto sp : vec) {
+			std::cout << std::string(sp.first, sp.last) 
+				<< "  ";
+		}
+		std::cout << '\n';
+	}
+	puts(std::string(args.front().size(), '=').c_str() );
+
+	std::cout << std::string(input.cbegin(), span.first) 
+		<< Blue << std::string(span.first, span.last) << Reset;
+	int i = 0;
+	while(span) {
+		Span prev = span;
+		span = root->eval({span.last, input.cend()});
+		std::cout << std::string(prev.last, span.first)
+			<< (i++ % 2 ? Blue : Cyan) << std::string(span.first, span.last) << Reset;
+	}
+	std::cout << '\n';
+
+	/*
 	State state;
 	auto spans = root->eval(input.begin(), input.end(), state);
 	for(auto s : spans) {
@@ -72,6 +102,7 @@ Waterloo finally facing my Waterloo";
 	std::cout << std::string(it, input.cend() ) << '\n';
 
 	puts(std::string(args.front().size(), '=').c_str() );
+	*/
 
 	return EXIT_SUCCESS;
 }

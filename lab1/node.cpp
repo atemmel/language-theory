@@ -1,41 +1,291 @@
 #include "node.hpp"
 
-size_t Scope::depth = 0;
+unsigned Scope::depth = 0;
 
-std::ostream &operator<<(std::ostream &os, Span s) {
-	return os << std::distance(s.first, s.last);
+Scope::Scope() {
+	++depth;
 }
 
-Spans removeSubsets(const Spans &spans, const Spans &filter) {
-	if(filter.empty() ) return spans;
-	Spans output;
-	for(auto s : spans) {
-		for(auto t : filter) {
-			if(!s.isSubset(t) ) {
-				output.push_back(s);
-			}
-		}
-	}
-	return output;
+Scope::~Scope() {
+	--depth;
 }
 
-Spans merge(const Spans &spans1, const Spans &spans2) {
-	Spans clean1 = removeSubsets(spans1, spans2);
-	Spans clean2 = removeSubsets(spans2, clean1);
-	Spans set(clean1.size() + clean2.size() );
-	std::merge(clean1.cbegin(), clean1.cend(), clean2.cbegin(),
-			clean2.cend(), set.begin() );
-	return set;
+namespace State {
+	unsigned caseInsDepth = 0;
+	Iterator strBegin;
+	Iterator strEnd;
+	std::vector<std::vector<Span> > groupings;
+};
+
+Span::operator bool() const {
+	return std::distance(first, last) != 0;
+}
+
+bool Span::operator<(Span rhs) const {
+	return first < rhs.first;
+}
+
+bool Span::operator==(Span rhs) const {
+	return first == rhs.first
+		&& last == rhs.last;
 }
 
 void Node::addChild(Child child) {
 	children.push_back(std::move(child) );
 }
 
+Span NodeSequence::eval(Span span) {
+	Span lhs = children.front()->eval(span);
+	auto checkState = [](Span oldSpan, Span newSpan) {
+		for(auto &v : State::groupings) {
+			std::replace(v.begin(), v.end(), oldSpan, newSpan);
+		}
+		return newSpan;
+	};
+	if(!lhs || children.size() == 1) {
+		//std::cout << "A\n";
+		return lhs;
+	}
+
+	//Edge case, ".*str"
+	if(lhs == span) {
+		Span rhs = children.back()->eval(span);
+		if(!rhs) {
+			//std::cout << "B\n";
+			return {
+				span.last,
+				span.last
+			};
+		}
+
+		//Edge case, ".*Waterloo"
+		if(lhs.first == rhs.first) {
+			rhs = children.back()->eval({rhs.last, span.last});
+			if(!rhs) {
+				//std::cout << "C\n";
+				return checkState(lhs, rhs);
+			}
+		}
+
+		Span prev;
+		while(rhs) {
+			prev = rhs;
+			rhs = children.back()->eval({rhs.last, span.last});
+		}
+
+		//std::cout << "D\n";
+		//std::cout << std::string(lhs.first, prev.last) << '\n'
+			//<< std::string(lhs.first, lhs.last) << '\n';
+		return checkState(lhs, {lhs.first, prev.last});
+		/*
+		return {
+			lhs.first,
+			prev.last
+		};
+		*/
+	}
+
+	span.first = lhs.last;
+
+	Span rhs = children.back()->eval(span);
+	if(!rhs) {
+		//std::cout << "E\n";
+		return checkState(lhs, rhs);
+	}
+
+
+	//Edge case, "str.*"
+	if(rhs == span) {
+		//std::cout << "F\n";
+		return checkState(rhs, {lhs.first, span.last} );	
+	}
+
+
+	for(; rhs; rhs = children.back()->eval({rhs.last, span.last} ) ) {
+		for(; lhs; lhs = children.front()->eval({lhs.last, span.last}) ) {
+			if(lhs.last == rhs.first) {
+				//std::cout << "G\n";
+				return {
+					lhs.first,
+					rhs.last
+				};
+			}
+		}
+		lhs = children.front()->eval(span);
+	}
+	//std::cout << "H\n";
+	return {
+		span.last,
+		span.last
+	};
+}
+
+Span NodeSelectionGroup::eval(Span span) {
+	if(value == 0) {
+		return children.front()->eval(span);
+	} else if(value > State::groupings.size() ) {
+		return {
+			span.last,
+			span.last
+		};
+	}
+	Span result = children.front()->eval(span);
+
+	if(State::groupings[value - 1].size() <= currentIndex) {
+		return {
+			span.last,
+			span.last
+		};
+	}
+
+	auto front = State::groupings[value - 1][currentIndex];
+	currentIndex++;
+	return front;
+}
+
+Span NodeGrouping::eval(Span span) {
+	Span result = children.front()->eval(span);
+	if(result) {
+		State::groupings[index].push_back(result);
+	}
+	return result;
+}
+
+Span NodeCaseInsensitive::eval(Span span) {
+	State::caseInsDepth++;
+	Span output = children.front()->eval(span);
+	State::caseInsDepth--;
+	return output;
+}
+
+Span NodeRepeated::eval(Span span) {
+	Span total = children.front()->eval(span);
+	while(total) {
+		span.first = total.last;
+		Span next = children.front()->eval(span);
+		int i = 0;
+		for(;next; i++) {
+			if(next.first == total.last) {
+				span.first = total.last = next.last;
+			} else {
+				break;
+			}
+
+			next = children.front()->eval(span);
+		}
+
+		if(i > 0) {
+			return total;
+		}
+
+		total = children.front()->eval(span);
+	}
+
+	return {
+		span.last,
+		span.last
+	};
+}
+
+Span NodeEither::eval(Span span) {
+	Span lhs = children.front()->eval(span);
+	Span rhs = children.back()->eval(span);
+
+	if(lhs) {
+		if(rhs) {
+			return lhs < rhs ? lhs : rhs;
+		} else {
+			return lhs;
+		}
+	}
+
+	if(rhs) {
+		return rhs;
+	}
+
+	return {
+		span.last,
+		span.last
+	};
+}
+
+Span NodeCounter::eval(Span span) {
+	Span total = children.front()->eval(span);
+
+	if(!total) {
+		return total;
+	}
+
+	span.first = total.last;
+	int i = 1;
+	for(; i < value; i++) {
+		Span part = children.front()->eval(span);
+		if(!part) {
+			return part;
+		}
+		if(part.first != total.last) {
+			return eval({total.last, span.last});
+		}
+		span.first = total.last = part.last;
+	}
+
+	if(i == value) {
+		return total;
+	}
+
+	return {
+		span.last,
+		span.last
+	};
+}
+
+
+Span NodeString::eval(Span span) {
+	std::string lower;
+	Span input = span;
+	if(State::caseInsDepth > 0) {
+		std::transform(value.begin(), value.end(), value.begin(), ::tolower);
+		lower.assign(span.first, span.last);
+		std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+		input = {
+			lower.cbegin(), 
+			lower.cend()
+		};
+	}
+
+	auto it = std::search(input.first, input.last,
+			std::boyer_moore_searcher(
+				value.begin(), value.end() ) );
+	if(State::caseInsDepth > 0) {
+		it = span.first + std::distance(lower.cbegin(), it);
+	}
+
+	if(it == span.last) {
+		return {span.last, span.last};
+	}
+
+	return {it, it + value.size() };
+}
+
+Span NodeWildcard::eval(Span span) {
+	if(!span) {
+		return span;
+	}
+	return {span.first, std::next(span.first) };
+}
+
 Child Parser::parseTokens(Tokens &&tokens) {
 	this->tokens = std::move(tokens);
 	this->iterator = this->tokens.begin();
-	return buildProgram();
+	auto seq = buildSequence();
+	if(end() ) {
+		return seq;
+	}
+	return nullptr;
+}
+
+void Parser::printErr() const {
+	std::cerr << iterator - tokens.begin() << '\n';
 }
 
 bool Parser::end() const {
@@ -49,59 +299,96 @@ Token *Parser::getIf(TokenType::Type token) {
 	return &*(iterator++);
 }
 
-Child Parser::buildProgram() {
-	auto program = std::make_unique<NodeProgram>();
-	for(;;) {
-		Child child = buildExpression();
+Child Parser::buildSequence() {
+	Child sequence = std::make_unique<NodeSequence>();
+	while(!end() ) {
+		if(sequence->children.size() == 2) {
+			Child parent = std::make_unique<NodeSequence>();
+			parent->addChild(std::move(sequence) );
+			sequence = std::move(parent);
+
+		}
+		Child child = buildValue();
 		if(!child) {
 			child = buildSelectionGroup();
+			if(child) {
+				if(!end() ) {
+					return nullptr;
+				}
+				//Lite bakvänt, men men
+				child->addChild(std::move(sequence) );
+				return child;
+			}
 		}
+
 		if(!child) {
-			return nullptr;
+			if(sequence->children.empty() ) {
+				return nullptr;
+			}
+			return sequence;
 		}
-		program->addChild(std::move(child) );
-		if(end() ) break;
+
+		Child unexpr = buildUnExpression(child);
+		while(unexpr) {
+			child = std::move(unexpr);
+			unexpr = buildUnExpression(child);
+		}
+
+		sequence->addChild(std::move(child) );
+
+		Child binexpr = buildBinExpression(sequence);
+		if(binexpr)  {
+			return binexpr;
+		}
 	}
-	return program;
+
+	if(sequence->children.empty() ) {
+		return nullptr;
+	}
+	return sequence;
 }
 
-Child Parser::buildExpression() {
-	Child child = buildString();
-	if(child) {
-		Child parent = buildInsensitive(child);
-		if(!parent) {
-			parent = buildRepeated(child);
-		}
-		if(!parent) {
-			parent = buildEither(child);
-		}
-		if(parent) {
-			return parent;
-		}
-		return child;
-	} 
+Child Parser::buildBinExpression(Child &child) {
+	return buildEither(child);
+}
 
-	child = buildWildcard();
-	if(child) {
-		Child parent = buildRepeated(child);
-		if(!parent) {
-			parent = buildCounter(child);
-		}
-		if(!parent) {
-			parent = buildEither(child);
-		}
-		if(parent) {
-			return parent;
-		}
-		return child;
+Child Parser::buildUnExpression(Child &child) {
+	Child parent = buildInsensitive(child);
+	if(parent) {
+		return parent;
 	}
 
-	child = buildGrouping();
-	if(child) {
-		return child;
+	if(mayStar) {
+		parent = buildRepeated(child);
+		if(parent) {
+			mayStar = false;
+			return parent;
+		}
+	}
+
+	parent = buildCounter(child);
+	if(parent) {
+		return parent;
 	}
 
 	return nullptr;
+}
+
+Child Parser::buildValue() {
+	Child child = buildString();
+	if(!child) {
+		child = buildWildcard();
+	} 
+
+	if(!child) {
+		child = buildGrouping();
+	}
+
+	if(child) {
+		mayStar = true;
+	}
+
+	return child;
 }
 
 Child Parser::buildSelectionGroup() {
@@ -122,23 +409,17 @@ Child Parser::buildGrouping() {
 	if(!getIf(TokenType::LParen) ) {
 		return nullptr;
 	}
-	Child child = buildExpression();
+	Child child = buildSequence();
 	if(!child || !getIf(TokenType::RParen) ) {
 		return nullptr;
 	}
-	Child parent = std::make_unique<NodeGrouping>();
+
+	std::unique_ptr<NodeGrouping> parent(new NodeGrouping() );
+	parent->index = State::groupings.size();
+	State::groupings.emplace_back();
+
 	parent->addChild(std::move(child) );
 
-	Child grandparent = buildRepeated(parent);
-	if(!grandparent) {
-		grandparent = buildInsensitive(parent);
-	}
-	if(!grandparent) {
-		grandparent = buildEither(parent);
-	}
-	if(grandparent) {
-		return grandparent;
-	}
 	return parent;
 }
 
@@ -146,13 +427,6 @@ Child Parser::buildInsensitive(Child &child) {
 	if(!getIf(TokenType::CaseInsensitive) ) return nullptr;
 	Child caseIns = std::make_unique<NodeCaseInsensitive>();
 	caseIns->addChild(std::move(child) );
-
-	Child grandparent = buildRepeated(caseIns);
-	if(!grandparent)
-		grandparent = buildEither(caseIns);
-	if(grandparent) {
-		return grandparent;
-	}
 	return caseIns;
 }
 
@@ -160,21 +434,18 @@ Child Parser::buildRepeated(Child &child) {
 	if(!getIf(TokenType::Repeated) ) return nullptr;
 	Child repeat = std::make_unique<NodeRepeated>();
 	repeat->addChild(std::move(child) );
-
-	Child grandparent = buildInsensitive(repeat);
-	if(!grandparent)
-		grandparent = buildEither(repeat);
-	if(grandparent) {
-		return grandparent;
-	}
 	return repeat;
 }
 
 Child Parser::buildEither(Child &child) {
 	if(!getIf(TokenType::Either) ) return nullptr;
 	Child either = std::make_unique<NodeEither>();
+	auto rhs = buildSequence();
+	if(!rhs) {
+		return nullptr;
+	}
 	either->addChild(std::move(child) );
-	either->addChild(std::move(buildExpression() ) );
+	either->addChild(std::move(rhs) );
 	return either;
 }
 
