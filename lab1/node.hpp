@@ -27,7 +27,7 @@ namespace State {
 	extern unsigned caseInsDepth;
 	extern Iterator strBegin;
 	extern Iterator strEnd;
-	extern std::vector<std::vector<Span> > groupings;
+	extern std::vector<Span> groupings;
 };
 
 class Node {

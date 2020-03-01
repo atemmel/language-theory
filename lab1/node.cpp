@@ -11,10 +11,13 @@ Scope::~Scope() {
 }
 
 namespace State {
+	bool justDidGroup = false;
+	unsigned index = 0;
+	unsigned justDidIndex = -1;
 	unsigned caseInsDepth = 0;
 	Iterator strBegin;
 	Iterator strEnd;
-	std::vector<std::vector<Span> > groupings;
+	std::vector<Span> groupings;
 };
 
 Span::operator bool() const {
@@ -30,28 +33,47 @@ bool Span::operator==(Span rhs) const {
 		&& last == rhs.last;
 }
 
+bool isWeird(Span span) {
+	return span.first > span.last;
+}
+
 void Node::addChild(Child child) {
 	children.push_back(std::move(child) );
 }
 
 Span NodeSequence::eval(Span span) {
 	Span lhs = children.front()->eval(span);
-	auto checkState = [](Span oldSpan, Span newSpan) {
-		for(auto &v : State::groupings) {
-			std::replace(v.begin(), v.end(), oldSpan, newSpan);
+	auto checkState = [](Iterator newLast) {
+		if(State::justDidGroup && State::justDidIndex == State::index) {
+			State::justDidGroup = false;
+			State::groupings[State::index].last = newLast;
+
+			/*
+			for(auto &v : State::groupings) {
+				v.last = newLast;
+			}
+			*/
 		}
-		return newSpan;
 	};
+
+	auto die = [](Span newSpan) {
+		if(State::justDidGroup) {
+			State::justDidGroup = false;
+			State::groupings[State::index] = newSpan;
+		}
+	};
+
 	if(!lhs || children.size() == 1) {
 		//std::cout << "A\n";
 		return lhs;
 	}
 
 	//Edge case, ".*str"
-	if(lhs == span) {
+	if(lhs.last == span.last && lhs.first < lhs.last) {
 		Span rhs = children.back()->eval(span);
 		if(!rhs) {
 			//std::cout << "B\n";
+			die(rhs);
 			return {
 				span.last,
 				span.last
@@ -63,7 +85,8 @@ Span NodeSequence::eval(Span span) {
 			rhs = children.back()->eval({rhs.last, span.last});
 			if(!rhs) {
 				//std::cout << "C\n";
-				return checkState(lhs, rhs);
+				die(rhs);
+				return rhs;
 			}
 		}
 
@@ -76,7 +99,8 @@ Span NodeSequence::eval(Span span) {
 		//std::cout << "D\n";
 		//std::cout << std::string(lhs.first, prev.last) << '\n'
 			//<< std::string(lhs.first, lhs.last) << '\n';
-		return checkState(lhs, {lhs.first, prev.last});
+		checkState(prev.first);
+		return {lhs.first, prev.last};
 		/*
 		return {
 			lhs.first,
@@ -90,14 +114,14 @@ Span NodeSequence::eval(Span span) {
 	Span rhs = children.back()->eval(span);
 	if(!rhs) {
 		//std::cout << "E\n";
-		return checkState(lhs, rhs);
+		return rhs;
 	}
 
 
 	//Edge case, "str.*"
 	if(rhs == span) {
 		//std::cout << "F\n";
-		return checkState(rhs, {lhs.first, span.last} );	
+		return {lhs.first, span.last};
 	}
 
 
@@ -129,25 +153,27 @@ Span NodeSelectionGroup::eval(Span span) {
 			span.last
 		};
 	}
+
+	State::groupings[value - 1] = {span.last, span.last};
+
+	State::index = value - 1;
 	Span result = children.front()->eval(span);
 
-	if(State::groupings[value - 1].size() <= currentIndex) {
-		return {
-			span.last,
-			span.last
-		};
+	auto front = State::groupings[value - 1];
+	if(isWeird(front) ) {
+		//std::swap(front.first, front.last);
+		front.last = front.first = span.last;
 	}
-
-	auto front = State::groupings[value - 1][currentIndex];
-	currentIndex++;
 	return front;
 }
 
 Span NodeGrouping::eval(Span span) {
 	Span result = children.front()->eval(span);
 	if(result) {
-		State::groupings[index].push_back(result);
+		State::groupings[index] = result;
 	}
+	State::justDidGroup = true;
+	State::justDidIndex = index;
 	return result;
 }
 

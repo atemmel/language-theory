@@ -58,12 +58,10 @@ Waterloo finally facing my Waterloo";
 	Span span = root->eval({input.cbegin(), input.cend()});
 
 	for(auto & vec : State::groupings) {
-		for(auto sp : vec) {
-			std::cout << std::string(sp.first, sp.last) 
-				<< "  ";
-		}
-		std::cout << '\n';
+		std::cout << std::string(vec.first, vec.last) 
+			<< "  ";
 	}
+	std::cout << '\n';
 	puts(std::string(args.front().size(), '=').c_str() );
 
 	std::cout << std::string(input.cbegin(), span.first) 
@@ -72,6 +70,9 @@ Waterloo finally facing my Waterloo";
 	while(span) {
 		Span prev = span;
 		span = root->eval({span.last, input.cend()});
+		//if(prev.last >= span.first || span.first > span.last) {
+		//break;
+		//}
 		std::cout << std::string(prev.last, span.first)
 			<< (i++ % 2 ? Blue : Cyan) << std::string(span.first, span.last) << Reset;
 	}
