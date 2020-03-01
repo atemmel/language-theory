@@ -57,12 +57,7 @@ Waterloo finally facing my Waterloo";
 
 	Span span = root->eval({input.cbegin(), input.cend()});
 
-	for(auto & vec : State::groupings) {
-		std::cout << std::string(vec.first, vec.last) 
-			<< "  ";
-	}
-	std::cout << '\n';
-	puts(std::string(args.front().size(), '=').c_str() );
+	int success = span ? EXIT_SUCCESS : EXIT_FAILURE;
 
 	std::cout << std::string(input.cbegin(), span.first) 
 		<< Blue << std::string(span.first, span.last) << Reset;
@@ -70,40 +65,10 @@ Waterloo finally facing my Waterloo";
 	while(span) {
 		Span prev = span;
 		span = root->eval({span.last, input.cend()});
-		//if(prev.last >= span.first || span.first > span.last) {
-		//break;
-		//}
 		std::cout << std::string(prev.last, span.first)
 			<< (i++ % 2 ? Blue : Cyan) << std::string(span.first, span.last) << Reset;
 	}
 	std::cout << '\n';
 
-	/*
-	State state;
-	auto spans = root->eval(input.begin(), input.end(), state);
-	for(auto s : spans) {
-		std::cout << '{' << s << "} ";
-		std::cout << std::string(s.first, s.last) << ' ';
-	}
-	std::cout << '\n';
-
-	puts(std::string(args.front().size(), '=').c_str() );
-
-	auto it = input.cbegin();
-	int i = 0;
-	for(auto s : spans) {
-		if(it > s.first) {
-			continue;
-		}
-		std::cout << std::string(it, s.first) << (i % 2 ? Blue : Cyan) 
-			<< std::string(s.first, s.last) << Reset;
-		it = s.last;
-		i++;
-	}
-	std::cout << std::string(it, input.cend() ) << '\n';
-
-	puts(std::string(args.front().size(), '=').c_str() );
-	*/
-
-	return EXIT_SUCCESS;
+	return success;
 }
