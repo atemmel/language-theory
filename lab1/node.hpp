@@ -17,6 +17,7 @@ struct Scope {
 };
 
 struct Span {
+	void print() const;
 	Iterator first, last;
 	operator bool() const;
 	bool operator<(Span rhs) const;
@@ -28,6 +29,7 @@ namespace State {
 	extern Iterator strBegin;
 	extern Iterator strEnd;
 	extern std::vector<Span> groupings;
+	extern std::vector<bool> wasGreedy;
 };
 
 class Node {

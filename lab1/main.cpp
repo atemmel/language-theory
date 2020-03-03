@@ -28,6 +28,11 @@ int main(int argc, char **argv) {
 	args.resize(argc - 1);
 	std::copy(argv + 1, argv + argc, args.begin() );
 
+	std::string input;
+	if(!std::getline(std::cin, input) ) {
+		return EXIT_FAILURE;
+	}
+
 	Tokenizer tokenizer;
 	Tokens tokens = tokenizer.tokenize(args.front() );
 	//tokenizer.print();
@@ -43,13 +48,15 @@ int main(int argc, char **argv) {
 	} else {
 		visit(root.get() );
 	}
+	
 
-
+	/*
 	std::string input = "Waterloo I was defeated, you won the war \
 Waterloo promise to love you for ever more \
 Waterloo couldn't escape if I wanted to \
 Waterloo knowing my fate is to be with you \
 Waterloo finally facing my Waterloo";
+*/
 	State::strBegin = input.begin();
 	State::strEnd = input.end();
 

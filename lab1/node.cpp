@@ -18,7 +18,12 @@ namespace State {
 	Iterator strBegin;
 	Iterator strEnd;
 	std::vector<Span> groupings;
+	std::vector<bool> wasGreedy;
 };
+
+void Span::print() const {
+	std::cout << std::string(first, last) << '\n';
+}
 
 Span::operator bool() const {
 	return std::distance(first, last) != 0;
@@ -42,9 +47,12 @@ Span NodeSequence::eval(Span span) {
 	auto checkState = [](Iterator newLast, Iterator totalLast) {
 		if(State::justDidGroup && State::justDidIndex == State::index) {
 			State::justDidGroup = false;
-			if(State::groupings[State::index].first <= newLast) {
+			if(State::wasGreedy[State::index] 
+					&& State::groupings[State::index].first <= newLast) {
+				State::groupings[State::index].print();
 				State::groupings[State::index].last = newLast;
-			} else {
+				State::groupings[State::index].print();
+			} else if(State::wasGreedy[State::index] ) {
 				State::groupings[State::index].last = State::groupings[State::index].first
 					= totalLast;
 			}
@@ -113,7 +121,7 @@ Span NodeSequence::eval(Span span) {
 					lhs.first,
 					rhs.last
 				};
-			}
+			} 
 		}
 		lhs = children.front()->eval(span);
 	}
@@ -134,17 +142,21 @@ Span NodeSelectionGroup::eval(Span span) {
 		};
 	}
 
-	State::groupings[value - 1] = {span.last, span.last};
-
 	State::index = value - 1;
-	Span result = children.front()->eval(span);
-
-	return State::groupings[value - 1];
+	State::groupings[State::index] = {span.last, span.last};
+	children.front()->eval(span);
+	return State::groupings[State::index];
 }
 
 Span NodeGrouping::eval(Span span) {
 	Span result = children.front()->eval(span);
+	if(State::groupings[index]) {	//Invalidera ej sig själv
+		return result;
+	}
 	State::groupings[index] = result;
+	if(result == span) {
+		State::wasGreedy[index] = true;
+	}
 	State::justDidGroup = true;
 	State::justDidIndex = index;
 	return result;
@@ -416,6 +428,7 @@ Child Parser::buildGrouping() {
 	std::unique_ptr<NodeGrouping> parent(new NodeGrouping() );
 	parent->index = State::groupings.size();
 	State::groupings.emplace_back();
+	State::wasGreedy.push_back(false);
 
 	parent->addChild(std::move(child) );
 
