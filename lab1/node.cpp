@@ -2,6 +2,8 @@
 
 unsigned Scope::depth = 0;
 
+State state;
+
 Scope::Scope() {
 	++depth;
 }
@@ -10,279 +12,175 @@ Scope::~Scope() {
 	--depth;
 }
 
-namespace State {
-	bool justDidGroup = false;
-	unsigned index = 0;
-	unsigned justDidIndex = -1;
-	unsigned caseInsDepth = 0;
-	Iterator strBegin;
-	Iterator strEnd;
-	std::vector<Span> groupings;
-	std::vector<bool> wasGreedy;
-};
-
-void Span::print() const {
-	std::cout << std::string(first, last) << '\n';
-}
-
-Span::operator bool() const {
-	return std::distance(first, last) != 0;
-}
-
-bool Span::operator<(Span rhs) const {
-	return first < rhs.first;
-}
-
-bool Span::operator==(Span rhs) const {
-	return first == rhs.first
-		&& last == rhs.last;
-}
-
 void Node::addChild(Child child) {
 	children.push_back(std::move(child) );
 }
 
-Span NodeSequence::eval(Span span) {
-	Span lhs = children.front()->eval(span);
-	auto checkState = [](Iterator newLast, Iterator totalLast) {
-		if(State::justDidGroup && State::justDidIndex == State::index) {
-			State::justDidGroup = false;
-			if(State::wasGreedy[State::index] 
-					&& State::groupings[State::index].first <= newLast) {
-				State::groupings[State::index].print();
-				State::groupings[State::index].last = newLast;
-				State::groupings[State::index].print();
-			} else if(State::wasGreedy[State::index] ) {
-				State::groupings[State::index].last = State::groupings[State::index].first
-					= totalLast;
+bool NodeSequence::eval() {
+	return evalPlane(children);
+}
+
+bool evalPlane(std::vector<Child> &plane) {
+ALGO_START:
+	auto old = state.resEnd;
+	bool res = plane.front()->eval();
+	while(!res && state.strEnd != state.resEnd) {
+		state.resEnd = ++state.resBegin;
+		res = plane.front()->eval();
+	}
+	auto multiplePlaneCheck = state.resBegin;
+
+	for(int i = 1; i < plane.size() && res; i++) {
+		if(state.wasGreedy) {
+			state.wasGreedy = false;
+			auto back = state.strEnd;
+			state.resEnd = back;
+			res = plane[i]->eval();
+			while(!res && old != state.resEnd) {
+				state.resEnd = --back;
+				res = plane[i]->eval();
 			}
-		}
-	};
-
-	auto die = [](Span newSpan) {
-		if(State::justDidGroup) {
-			State::justDidGroup = false;
-			State::groupings[State::index] = newSpan;
-		}
-	};
-
-	if(!lhs || children.size() == 1) {
-		return lhs;
-	}
-
-	//Edge case, ".*str"
-	if(lhs.last == span.last && lhs.first < lhs.last) {
-		Span rhs = children.back()->eval(span);
-		if(!rhs) {
-			die(rhs);
-			return {
-				span.last,
-				span.last
-			};
-		}
-
-		//Edge case, ".*Waterloo"
-		if(lhs.first == rhs.first) {
-			rhs = children.back()->eval({rhs.last, span.last});
-			if(!rhs) {
-				die(rhs);
-				return rhs;
-			}
-		}
-
-		Span prev;
-		while(rhs) {
-			prev = rhs;
-			rhs = children.back()->eval({rhs.last, span.last});
-		}
-
-		checkState(prev.first, span.last);
-		return {lhs.first, prev.last};
-	}
-
-	span.first = lhs.last;
-
-	Span rhs = children.back()->eval(span);
-	if(!rhs) {
-		return rhs;
-	}
-
-
-	//Edge case, "str.*"
-	if(rhs == span) {
-		return {lhs.first, span.last};
-	}
-
-
-	for(; rhs; rhs = children.back()->eval({rhs.last, span.last} ) ) {
-		for(; lhs; lhs = children.front()->eval({lhs.last, span.last}) ) {
-			if(lhs.last == rhs.first) {
-				return {
-					lhs.first,
-					rhs.last
-				};
+			if(!res) {
+				state.resEnd = state.resBegin = state.strEnd;
+				return false;
 			} 
+			if(!state.groupings.empty()) {
+				state.groupings[state.lastGrouping].last = back;
+			}
+			old = state.resEnd;
+		} else {
+			old = state.resEnd;
+			res = plane[i]->eval();
 		}
-		lhs = children.front()->eval(span);
+		
 	}
 
-	return {
-		span.last,
-		span.last
-	};
+	if(!res && state.resEnd != state.strEnd) {
+		goto ALGO_START;
+	}
+
+	if(multiplePlaneCheck != state.resBegin) {
+		return false;
+	}
+
+	// Cutoff error fix
+	if(!res) {
+		state.resBegin = state.strEnd;
+	}
+	return res;
 }
 
-Span NodeSelectionGroup::eval(Span span) {
-	if(value == 0) {
-		return children.front()->eval(span);
-	} else if(value > State::groupings.size() ) {
-		return {
-			span.last,
-			span.last
-		};
+bool NodeSelectionGroup::eval() {
+	bool res = children.front()->eval();
+	if(res && value > 0) {
+		state.resBegin = state.groupings[value - 1].first;
+		state.resEnd = state.groupings[value - 1].last;
+	} else if(!res) {
+		state.resBegin = state.resEnd = state.strEnd;
 	}
-
-	State::index = value - 1;
-	State::groupings[State::index] = {span.last, span.last};
-	children.front()->eval(span);
-	return State::groupings[State::index];
+	return res;
 }
 
-Span NodeGrouping::eval(Span span) {
-	Span result = children.front()->eval(span);
-	if(State::groupings[index]) {	//Invalidera ej sig själv
-		return result;
-	}
-	State::groupings[index] = result;
-	if(result == span) {
-		State::wasGreedy[index] = true;
-	}
-	State::justDidGroup = true;
-	State::justDidIndex = index;
+bool NodeGrouping::eval() {
+	auto start = state.resEnd;
+	bool res = children.front()->eval();
+	state.groupings[index] = res ? Span{start, state.resEnd} 
+		: Span{state.strEnd, state.strEnd};
+	state.lastGrouping = index;
+	return res;
+}
+
+bool NodeCaseInsensitive::eval() {
+	state.caseInsDepth++;
+	bool result = children.front()->eval();
+	state.caseInsDepth--;
 	return result;
 }
 
-Span NodeCaseInsensitive::eval(Span span) {
-	State::caseInsDepth++;
-	Span output = children.front()->eval(span);
-	State::caseInsDepth--;
-	return output;
+bool NodeRepeated::eval() {
+	state.cameFromWildcard = false;
+	bool result = children.front()->eval();
+	if(!result) {
+		return false;
+	}
+	auto prev = std::prev(state.resEnd);
+	if(*state.resEnd == *prev) {
+		while(state.resEnd < state.strEnd && *state.resEnd == *prev) {
+			state.resEnd++;
+		}
+		return true;
+	} else if(state.cameFromWildcard) {
+		state.cameFromWildcard = false;
+		state.wasGreedy = true;
+		state.resEnd = state.strEnd;
+	}
+	return true;
 }
 
-Span NodeRepeated::eval(Span span) {
-	Span total = children.front()->eval(span);
-	while(total) {
-		span.first = total.last;
-		Span next = children.front()->eval(span);
-		int i = 0;
-		for(;next; i++) {
-			if(next.first == total.last) {
-				span.first = total.last = next.last;
-			} else {
-				break;
+bool NodeEither::eval() {
+	State save = state;
+	bool lhsSuccess = children.front()->eval();
+	State lhsState = state;
+	state = save;
+	bool rhsSuccess = children.back()->eval();
+	State rhsState = state;
+
+	if(!lhsSuccess && !rhsSuccess) {
+		state = rhsState.resEnd < lhsState.resEnd ? rhsState : lhsState;
+		return false;
+	} else if(lhsSuccess && !rhsSuccess) {
+		state = lhsState;
+		return true;
+	} else if(!lhsSuccess && rhsSuccess) {
+		state = rhsState;
+		return true;
+	}
+
+	// Both suceeded, find out which one progressed the furthest
+
+	if(rhsState.resBegin <= lhsState.resBegin) {
+		state = rhsState;
+		return true;
+	} 
+
+	state = lhsState;
+	return true;
+}
+
+bool NodeCounter::eval() {
+	if(std::distance(state.resEnd, state.strEnd) < value) {
+		return false;
+	}
+	for(int i = 0; i < value; i++) {
+		if(!children.front()->eval() ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool NodeString::eval() {
+	for(auto c : value) {
+		const bool isUpper = state.caseInsDepth == 0;
+		if(isUpper) {
+			if(state.resEnd == state.strEnd || *state.resEnd != c) {
+				return false;
 			}
-
-			next = children.front()->eval(span);
+		} else if(std::toupper(*state.resEnd) != std::toupper(c)) {
+			return false;
 		}
-
-		if(i > 0) {
-			return total;
-		}
-
-		total = children.front()->eval(span);
+		state.resEnd++;
 	}
-
-	return {
-		span.last,
-		span.last
-	};
+	return true;
 }
 
-Span NodeEither::eval(Span span) {
-	Span lhs = children.front()->eval(span);
-	Span rhs = children.back()->eval(span);
-
-	if(lhs) {
-		if(rhs) {
-			return lhs < rhs ? lhs : rhs;
-		} else {
-			return lhs;
-		}
+bool NodeWildcard::eval() {
+	if(state.resEnd == state.strEnd) {
+		return false;
 	}
-
-	if(rhs) {
-		return rhs;
-	}
-
-	return {
-		span.last,
-		span.last
-	};
-}
-
-Span NodeCounter::eval(Span span) {
-	Span total = children.front()->eval(span);
-
-	if(!total) {
-		return total;
-	}
-
-	span.first = total.last;
-	int i = 1;
-	for(; i < value; i++) {
-		Span part = children.front()->eval(span);
-		if(!part) {
-			return part;
-		}
-		if(part.first != total.last) {
-			return eval({total.last, span.last});
-		}
-		span.first = total.last = part.last;
-	}
-
-	if(i == value) {
-		return total;
-	}
-
-	return {
-		span.last,
-		span.last
-	};
-}
-
-
-Span NodeString::eval(Span span) {
-	std::string lower;
-	Span input = span;
-	if(State::caseInsDepth > 0) {
-		std::transform(value.begin(), value.end(), value.begin(), ::tolower);
-		lower.assign(span.first, span.last);
-		std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-		input = {
-			lower.cbegin(), 
-			lower.cend()
-		};
-	}
-
-	auto it = std::search(input.first, input.last,
-			std::boyer_moore_searcher(
-				value.begin(), value.end() ) );
-	if(State::caseInsDepth > 0) {
-		it = span.first + std::distance(lower.cbegin(), it);
-	}
-
-	if(it == span.last) {
-		return {span.last, span.last};
-	}
-
-	return {it, it + value.size() };
-}
-
-Span NodeWildcard::eval(Span span) {
-	if(!span) {
-		return span;
-	}
-	return {span.first, std::next(span.first) };
+	state.resEnd++;
+	state.cameFromWildcard = true;
+	return true;
 }
 
 Child Parser::parseTokens(Tokens &&tokens) {
@@ -313,12 +211,6 @@ Token *Parser::getIf(TokenType::Type token) {
 Child Parser::buildSequence() {
 	Child sequence = std::make_unique<NodeSequence>();
 	while(!end() ) {
-		if(sequence->children.size() == 2) {
-			Child parent = std::make_unique<NodeSequence>();
-			parent->addChild(std::move(sequence) );
-			sequence = std::move(parent);
-
-		}
 		Child child = buildValue();
 		if(!child) {
 			child = buildSelectionGroup();
@@ -345,12 +237,15 @@ Child Parser::buildSequence() {
 			unexpr = buildUnExpression(child);
 		}
 
-		sequence->addChild(std::move(child) );
 
-		Child binexpr = buildBinExpression(sequence);
+		Child seq = std::make_unique<NodeSequence>();
+		Child binexpr = buildBinExpression(seq);
 		if(binexpr)  {
-			return binexpr;
-		}
+			binexpr->children.front()->addChild(std::move(child) );
+			child = std::move(binexpr);
+
+		} 
+		sequence->addChild(std::move(child) );
 	}
 
 	if(sequence->children.empty() ) {
@@ -426,9 +321,8 @@ Child Parser::buildGrouping() {
 	}
 
 	std::unique_ptr<NodeGrouping> parent(new NodeGrouping() );
-	parent->index = State::groupings.size();
-	State::groupings.emplace_back();
-	State::wasGreedy.push_back(false);
+	parent->index = state.groupings.size();
+	state.groupings.emplace_back();
 
 	parent->addChild(std::move(child) );
 

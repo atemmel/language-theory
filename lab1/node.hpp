@@ -17,72 +17,75 @@ struct Scope {
 };
 
 struct Span {
-	void print() const;
 	Iterator first, last;
-	operator bool() const;
-	bool operator<(Span rhs) const;
-	bool operator==(Span rhs) const;
 };
 
-namespace State {
-	extern unsigned caseInsDepth;
-	extern Iterator strBegin;
-	extern Iterator strEnd;
-	extern std::vector<Span> groupings;
-	extern std::vector<bool> wasGreedy;
+struct State {
+	std::vector<Span> groupings;
+	unsigned caseInsDepth;
+	unsigned lastGrouping = 0;
+	Iterator strBegin;
+	Iterator strEnd;
+	Iterator resBegin;
+	Iterator resEnd;
+	bool cameFromWildcard = false;
+	bool wasGreedy = false;
 };
+
+extern State state;
 
 class Node {
 public:
 	virtual void print() = 0;
-	virtual Span eval(Span span) = 0;
+	virtual bool eval() = 0;
 	void addChild(Child child);
 	std::vector<Child> children;
 };
 
+bool evalPlane(std::vector<Child> &plane);
+
 class NodeSequence : public Node {
 public:
 	void print() override { std::cout << "Sequence\n"; }
-	Span eval(Span span) override;
+	bool eval() override;
 };
 
 class NodeSelectionGroup : public Node {
 public:
 	void print() override { std::cout << "SelectionGroup : " << value << '\n'; }
-	Span eval(Span span) override;
+	bool eval() override;
 	int value = 0;
-	int currentIndex = 0;
 };
 
 class NodeGrouping : public Node {
 public:
 	void print() override { std::cout << "Grouping\n"; }
-	Span eval(Span span) override;
+	bool eval() override;
 	int index = 0;
 };
 
 class NodeCaseInsensitive: public Node {
 public:
 	void print() override { std::cout << "CaseInsensitive\n"; }
-	Span eval(Span span) override;
+	bool eval() override;
 };
 
 class NodeRepeated: public Node {
 public:
 	void print() override { std::cout << "Repeated\n"; }
-	Span eval(Span span) override;
+	bool eval() override;
 };
 
 class NodeEither: public Node {
 public:
 	void print() override { std::cout << "Either\n"; }
-	Span eval(Span span) override;
+	bool eval() override;
 };
 
 class NodeCounter : public Node {
 public:
 	void print() override { std::cout << "Counter : " << value << '\n'; }
-	Span eval(Span span) override;
+	bool eval() override;
 	int value = 0;
 };
 
@@ -90,14 +93,14 @@ class NodeString: public Node {
 public:
 	NodeString(const std::string &str) : value(str) {};
 	void print() override { std::cout << "String : " << value << '\n'; }
-	Span eval(Span span) override;
+	bool eval() override;
 	std::string value;
 };
 
 class NodeWildcard: public Node {
 public:
 	void print() override { std::cout << "Wildcard\n"; }
-	Span eval(Span span) override;
+	bool eval() override;
 };
 
 class Parser {

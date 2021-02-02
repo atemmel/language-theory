@@ -1,5 +1,6 @@
 #include <iostream>
 
+/*
 template<typename T, unsigned exp>
 struct Pow {
 	constexpr static T pow(T n) {
@@ -20,8 +21,8 @@ struct Pow<T, 0> {
 		return 1;
 	}
 };
+*/
 
-/*
 template<typename T, T val, unsigned exp>
 struct Pow {
 	constexpr static T value = val * Pow<T, val, exp - 1>::value;
@@ -36,9 +37,10 @@ template<typename T, T val>
 struct Pow<T, val, 0> {
 	constexpr static T value = 1;
 };
-*/
+
+//enable if för negativa exponenter
 
 int main() {
-	std::cout << Pow<int, 4>::pow(16) << '\n';
-	//std::cout << Pow<int, 16, 4>::value << '\n';
+	//std::cout << Pow<int, 4>::pow(16) << '\n';
+	std::cout << Pow<int, 16, 4>::value << '\n';
 }

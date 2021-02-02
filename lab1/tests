@@ -1,0 +1,25 @@
+Funkar:
+.
+lo
+lo*
+.*
+lo.
++
+Wa\I
+Waterloo .*
+Waterloo .*the war
+.*loo
+promise to (Love+Hate)\I you\O{1}
+Waterloo (.*)facing\O{1}
+Waterloo (.*)Waterloo\O{1}
+Waterloo (.*)facing\O{0}
+I (.*) the war (.*) Waterloo\O{2}
+lo*.
+((lo*)*+.*\I\I\I\I+asdf\I)\I
+could.{3}
+lo* could.{3}
+{N}
+love (Waterloo)
+a+.
+
+Funkar inte:

@@ -2,8 +2,8 @@
 
 #include <string_view>
 
-constexpr std::string_view Blue = "\x1B[34m";
-constexpr std::string_view Cyan = "\x1B[36m";
+constexpr std::string_view Blue = "\x1B[93m";
+constexpr std::string_view Cyan = "\x1B[95m";
 constexpr std::string_view Reset = "\x1B[0m";
 
 void visit(Node *node) {
@@ -49,33 +49,20 @@ int main(int argc, char **argv) {
 		visit(root.get() );
 	}
 	
+	state.strBegin = state.resBegin = state.resEnd = input.cbegin();
+	state.strEnd = input.cend();
 
-	/*
-	std::string input = "Waterloo I was defeated, you won the war \
-Waterloo promise to love you for ever more \
-Waterloo couldn't escape if I wanted to \
-Waterloo knowing my fate is to be with you \
-Waterloo finally facing my Waterloo";
-*/
-	State::strBegin = input.begin();
-	State::strEnd = input.end();
-
-	puts(std::string(args.front().size(), '=').c_str() );
-
-	Span span = root->eval({input.cbegin(), input.cend()});
-
-	int success = span ? EXIT_SUCCESS : EXIT_FAILURE;
-
-	std::cout << std::string(input.cbegin(), span.first) 
-		<< Blue << std::string(span.first, span.last) << Reset;
-	int i = 0;
-	while(span) {
-		Span prev = span;
-		span = root->eval({span.last, input.cend()});
-		std::cout << std::string(prev.last, span.first)
-			<< (i++ % 2 ? Blue : Cyan) << std::string(span.first, span.last) << Reset;
+	bool result = root->eval();
+	std::cout << std::string(input.cbegin(), state.resBegin);
+	int i = 1;
+	while(result) {
+		std::cout << (i++ % 2 ? Blue : Cyan) 
+			<< std::string(state.resBegin, state.resEnd) << Reset;
+		auto it = state.resBegin = state.resEnd;
+		result = root->eval();
+		std::cout << std::string(it, state.resBegin);
 	}
-	std::cout << '\n';
+	std::cout << std::string(state.resEnd, input.cend() ) << '\n';
 
-	return success;
+	return EXIT_SUCCESS;
 }
