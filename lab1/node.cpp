@@ -137,13 +137,7 @@ bool NodeEither::eval() {
 	}
 
 	// Both suceeded, find out which one progressed the furthest
-
-	if(rhsState.resBegin <= lhsState.resBegin) {
-		state = rhsState;
-		return true;
-	} 
-
-	state = lhsState;
+	state = rhsState.resBegin <= lhsState.resBegin ? rhsState : lhsState;
 	return true;
 }
 
