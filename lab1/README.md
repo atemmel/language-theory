@@ -15,4 +15,5 @@ Grammar:
 <Value> ::= <String> | <Wildcard> | <Grouping>
 <UnaryExpr> ::= <Wildcard> | <Counter> | <Repeated> | <Insensitive>
 <BinaryExpr> ::= <Either>
+<Expr> ::= <Value> | <UnaryExpr> | <BinaryExpr>
 ```
